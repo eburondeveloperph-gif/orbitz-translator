@@ -112,15 +112,18 @@ export class GenAILiveClient {
         return true;
       } catch (e: any) {
         retries++;
-        // Check for common temporary availability errors
-        const isUnavailable = 
-          e?.message?.toLowerCase().includes('unavailable') || 
-          e?.message?.includes('503') || 
+        // Check for common temporary availability or network errors
+        const errorMsg = e?.message?.toLowerCase() || '';
+        const isRetryable = 
+          errorMsg.includes('unavailable') || 
+          errorMsg.includes('network') || 
+          errorMsg.includes('fetch') || 
+          errorMsg.includes('503') || 
           e?.status === 503;
 
-        if (isUnavailable && retries < maxRetries) {
+        if (isRetryable && retries < maxRetries) {
           const delay = 500 * Math.pow(2, retries); // Exponential backoff: 1s, 2s...
-          console.warn(`GenAI Live API Unavailable (Attempt ${retries}/${maxRetries}). Retrying in ${delay}ms...`);
+          console.warn(`GenAI Live API Error (${e.message}). Retrying in ${delay}ms...`);
           await new Promise(resolve => setTimeout(resolve, delay));
           continue;
         }

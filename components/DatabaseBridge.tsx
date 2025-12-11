@@ -304,12 +304,11 @@ export default function DatabaseBridge() {
 
     const fetchLatest = async () => {
       try {
-        const { data, error } = await supabase
+        const { data: rows, error } = await supabase
           .from('transcripts')
           .select('*')
           .order('updated_at', { ascending: false })
-          .limit(1)
-          .maybeSingle();
+          .limit(1);
         
         if (error) {
           // Log quiet warning instead of throwing to avoid noise
@@ -317,8 +316,8 @@ export default function DatabaseBridge() {
           return;
         }
 
-        if (data) {
-          processNewData(data as Transcript);
+        if (rows && rows.length > 0) {
+          processNewData(rows[0] as Transcript);
         }
       } catch (err) {
         // Catch network errors (e.g. offline, CORS, invalid URL)
