@@ -24,17 +24,17 @@
 export const DEFAULT_LIVE_API_MODEL =
   'gemini-2.5-flash-native-audio-preview-09-2025';
 
-export const DEFAULT_VOICE = 'Puck';
+export const DEFAULT_VOICE = 'Orus';
 
 export const SPEAKER_VOICE_MAP: Record<string, string> = {
-  'Male 1': 'Puck',
-  'Male 2': 'Fenrir',
+  'Male 1': 'Orus',
+  'Male 2': 'Charon',
   'Female 1': 'Aoede',
   'Female 2': 'Kore',
 };
 
 export const AVAILABLE_VOICES = [
-  'Puck',
+  'Orus',
   'Charon',
   'Kore',
   'Fenrir',
