@@ -96,7 +96,7 @@ export class GenAILiveClient {
     };
 
     let retries = 0;
-    const maxRetries = 3;
+    const maxRetries = 5; // Increased resilience
 
     while (retries < maxRetries) {
       try {
@@ -112,7 +112,6 @@ export class GenAILiveClient {
         return true;
       } catch (e: any) {
         retries++;
-        // Check for common temporary availability or network errors
         const errorMsg = e?.message?.toLowerCase() || '';
         const isRetryable = 
           errorMsg.includes('unavailable') || 
@@ -122,19 +121,18 @@ export class GenAILiveClient {
           e?.status === 503;
 
         if (isRetryable && retries < maxRetries) {
-          const delay = 500 * Math.pow(2, retries); // Exponential backoff: 1s, 2s...
-          console.warn(`GenAI Live API Error (${e.message}). Retrying in ${delay}ms...`);
+          const delay = 500 * Math.pow(2, retries); 
+          console.warn(`GenAI Live API Connection Failed (${e.message}). Retrying ${retries}/${maxRetries} in ${delay}ms...`);
           await new Promise(resolve => setTimeout(resolve, delay));
           continue;
         }
 
-        // If not retryable or max retries reached:
-        console.error('Error connecting to GenAI Live:', e);
+        console.error('Fatal Error connecting to GenAI Live:', e);
         this._status = 'disconnected';
         this.session = undefined;
         const errorEvent = new ErrorEvent('error', {
           error: e,
-          message: e?.message || 'Failed to connect.',
+          message: e?.message || 'Failed to connect to Gemini Live service.',
         } as any);
         this.onError(errorEvent);
         return false;
