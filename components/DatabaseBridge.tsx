@@ -309,7 +309,7 @@ export default function DatabaseBridge() {
           .select('*')
           .order('updated_at', { ascending: false })
           .limit(1)
-          .single();
+          .maybeSingle();
         
         if (error) {
           // Log quiet warning instead of throwing to avoid noise

@@ -29,7 +29,7 @@ export default function Sidebar() {
       .select('*')
       .order('updated_at', { ascending: false })
       .limit(1)
-      .single()
+      .maybeSingle()
       .then(({ data, error }) => {
         if (!error && data) {
           setDbData(data);
