@@ -18,6 +18,7 @@
  * limitations under the License.
  */
 
+import { useEffect } from 'react';
 import ControlTray from './components/console/control-tray/ControlTray';
 import ErrorScreen from './components/demo/ErrorScreen';
 import StreamingConsole from './components/demo/streaming-console/StreamingConsole';
@@ -43,8 +44,13 @@ if (typeof API_KEY !== 'string') {
 function App() {
   const { theme } = useUI();
   
+  // Apply theme to body/html to ensure global CSS variables work correctly
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+  }, [theme]);
+
   return (
-    <div className="App" data-theme={theme}>
+    <div className="App">
       <LiveAPIProvider apiKey={API_KEY}>
         <DatabaseBridge />
         <ErrorScreen />
@@ -54,10 +60,9 @@ function App() {
           <main>
             <div className="main-app-area">
               <StreamingConsole />
-
             </div>
 
-            <ControlTray></ControlTray>
+            <ControlTray />
             <BottomVisualizer />
           </main>
         </div>
