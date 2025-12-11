@@ -95,37 +95,37 @@ export class GenAILiveClient {
       onclose: this.onClose.bind(this),
     };
 
-    try {
-      this.session = await this.client.live.connect({
-        model: this.model,
-        config: {
-          ...config,
-        },
-        callbacks,
-      });
-    } catch (e: any) {
-      if (e.message?.includes('unavailable') || e.message?.includes('503')) {
-        console.warn('GenAI Live API Unavailable. Retrying in 1s...');
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        try {
-          this.session = await this.client.live.connect({
-            model: this.model,
-            config: {
-              ...config,
-            },
-            callbacks,
-          });
-        } catch (retryError: any) {
-          console.error('Retry failed:', retryError);
-          this._status = 'disconnected';
-          const errorEvent = new ErrorEvent('error', {
-            error: retryError,
-            message: retryError?.message || 'Failed to connect after retry.',
-          } as any);
-          this.onError(errorEvent);
-          return false;
+    let retries = 0;
+    const maxRetries = 3;
+
+    while (retries < maxRetries) {
+      try {
+        this.session = await this.client.live.connect({
+          model: this.model,
+          config: {
+            ...config,
+          },
+          callbacks,
+        });
+        
+        this._status = 'connected';
+        return true;
+      } catch (e: any) {
+        retries++;
+        // Check for common temporary availability errors
+        const isUnavailable = 
+          e?.message?.toLowerCase().includes('unavailable') || 
+          e?.message?.includes('503') || 
+          e?.status === 503;
+
+        if (isUnavailable && retries < maxRetries) {
+          const delay = 500 * Math.pow(2, retries); // Exponential backoff: 1s, 2s...
+          console.warn(`GenAI Live API Unavailable (Attempt ${retries}/${maxRetries}). Retrying in ${delay}ms...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          continue;
         }
-      } else {
+
+        // If not retryable or max retries reached:
         console.error('Error connecting to GenAI Live:', e);
         this._status = 'disconnected';
         this.session = undefined;
@@ -137,9 +137,8 @@ export class GenAILiveClient {
         return false;
       }
     }
-
-    this._status = 'connected';
-    return true;
+    
+    return false;
   }
 
   public disconnect() {

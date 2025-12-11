@@ -232,14 +232,25 @@ export function useLiveApi({
       }
     });
 
-    // Connect ALL clients
-    await Promise.all([
-      client.connect(config),
-      male1.connect(getSpeakerConfig(SPEAKER_VOICE_MAP['Male 1'])),
-      male2.connect(getSpeakerConfig(SPEAKER_VOICE_MAP['Male 2'])),
-      female1.connect(getSpeakerConfig(SPEAKER_VOICE_MAP['Female 1'])),
-      female2.connect(getSpeakerConfig(SPEAKER_VOICE_MAP['Female 2'])),
-    ]);
+    // Sequentially connect clients to avoid "Service Unavailable" burst errors
+    try {
+      await client.connect(config);
+      await new Promise(r => setTimeout(r, 50)); // Tiny stagger
+      
+      await male1.connect(getSpeakerConfig(SPEAKER_VOICE_MAP['Male 1']));
+      await new Promise(r => setTimeout(r, 50));
+      
+      await male2.connect(getSpeakerConfig(SPEAKER_VOICE_MAP['Male 2']));
+      await new Promise(r => setTimeout(r, 50));
+      
+      await female1.connect(getSpeakerConfig(SPEAKER_VOICE_MAP['Female 1']));
+      await new Promise(r => setTimeout(r, 50));
+      
+      await female2.connect(getSpeakerConfig(SPEAKER_VOICE_MAP['Female 2']));
+    } catch (err) {
+      console.error("Initialization error:", err);
+      // We rely on the internal error handlers to update state if things fail partially
+    }
 
   }, [client, male1, male2, female1, female2, config, backgroundPadEnabled, backgroundPadVolume]);
 
