@@ -2,17 +2,27 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
 */
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
 import { supabase, Transcript } from '../lib/supabase';
 import { useLiveAPIContext } from '../contexts/LiveAPIContext';
 import { useLogStore, useSettings } from '../lib/state';
 
 // Worker script to ensure polling continues even when tab is in background
+// and to provide precise timing for main thread loops to avoid throttling
 const workerScript = `
-  self.onmessage = function() {
-    setInterval(() => {
-      self.postMessage('tick');
-    }, 5000);
+  self.onmessage = function(e) {
+    const data = e.data;
+    if (data === 'start') {
+      // Polling heartbeat
+      setInterval(() => {
+        self.postMessage({ type: 'tick' });
+      }, 5000);
+    } else if (data && data.type === 'wait') {
+      // Precise one-off timer
+      setTimeout(() => {
+        self.postMessage({ type: 'wait_complete', id: data.id });
+      }, data.ms);
+    }
   };
 `;
 
@@ -45,6 +55,23 @@ export default function DatabaseBridge() {
 
   // Buffer to capture incoming translations for the current turn
   const currentTranslationBufferRef = useRef<string>('');
+  
+  // Worker reference for timing
+  const workerRef = useRef<Worker | null>(null);
+  const pendingWaitsRef = useRef<Map<string, () => void>>(new Map());
+
+  // Precise wait function using Worker to bypass main thread throttling
+  const workerWait = useCallback((ms: number) => {
+    return new Promise<void>((resolve) => {
+      if (!workerRef.current) {
+        setTimeout(resolve, ms); // Fallback
+        return;
+      }
+      const id = crypto.randomUUID();
+      pendingWaitsRef.current.set(id, resolve);
+      workerRef.current.postMessage({ type: 'wait', id, ms });
+    });
+  }, []);
 
   useEffect(() => {
     voiceStyleRef.current = voiceStyle;
@@ -163,6 +190,7 @@ export default function DatabaseBridge() {
           queueRef.current.shift();
 
           // 2. Wait for Audio to ARRIVE for this specific speaker
+          // Using workerWait instead of setTimeout loop to handle background throttling
           const waitStart = Date.now();
           let audioArrived = false;
           while (Date.now() - waitStart < 15000) {
@@ -172,7 +200,7 @@ export default function DatabaseBridge() {
                 audioArrived = true;
                 break;
              }
-             await new Promise(resolve => setTimeout(resolve, 250));
+             await workerWait(250); 
           }
 
           if (!audioArrived) {
@@ -182,6 +210,7 @@ export default function DatabaseBridge() {
           // 3. VIDEOKE STYLE OVERLAP: Dynamic Wait
           // We wait until the current audio is *almost* finished before starting the next turn.
           // This allows masking the latency of the next request.
+          // Using workerWait to ensure precision in background.
           
           const playStart = Date.now();
           
@@ -196,7 +225,7 @@ export default function DatabaseBridge() {
                 break;
              }
              
-             await new Promise(resolve => setTimeout(resolve, 100));
+             await workerWait(100);
           }
 
           // 5. Save Translation to Supabase
@@ -297,13 +326,25 @@ export default function DatabaseBridge() {
       }
     };
 
-    // Initialize Web Worker for background polling
-    const blob = new Blob([workerScript], { type: 'application/javascript' });
-    const worker = new Worker(URL.createObjectURL(blob));
-    worker.onmessage = () => {
-      fetchLatest();
-    };
-    worker.postMessage('start');
+    // Initialize Web Worker for background polling and timing
+    if (!workerRef.current) {
+        const blob = new Blob([workerScript], { type: 'application/javascript' });
+        workerRef.current = new Worker(URL.createObjectURL(blob));
+        
+        workerRef.current.onmessage = (e) => {
+          if (e.data && e.data.type === 'tick') {
+             fetchLatest();
+          } else if (e.data && e.data.type === 'wait_complete') {
+             const resolve = pendingWaitsRef.current.get(e.data.id);
+             if (resolve) {
+                resolve();
+                pendingWaitsRef.current.delete(e.data.id);
+             }
+          }
+        };
+        
+        workerRef.current.postMessage('start');
+    }
 
     // Setup Realtime Subscription
     const channel = supabase
@@ -328,10 +369,13 @@ export default function DatabaseBridge() {
     fetchLatest();
 
     return () => {
-      worker.terminate();
+      if (workerRef.current) {
+        workerRef.current.terminate();
+        workerRef.current = null;
+      }
       supabase.removeChannel(channel);
     };
-  }, [connected, client, addTurn, updateTurn, getAudioStreamerState, sendToSpeaker, addOutputListener]);
+  }, [connected, client, addTurn, updateTurn, getAudioStreamerState, sendToSpeaker, addOutputListener, workerWait]);
 
   return null;
 }
